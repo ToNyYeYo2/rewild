@@ -1,7 +1,8 @@
 /* eslint-disable react/prop-types */
 import WorldComposition from './WorldComposition';
 import AvatarSprite from './AvatarSprite';
-import { WORLD_STATES } from '../constants/worldStates';
+import { WORLD_STATES, STATE_COLORS, STATE_BANDS } from '../constants/worldStates';
+import { DAILY_MAX } from '../utils/scoring';
 
 export default function WorldScreen({
   worldState,
@@ -13,8 +14,18 @@ export default function WorldScreen({
   transitioning,
   earlyUser,
   pillarAverages,
+  rollingAverage,
 }) {
   const state = WORLD_STATES[worldState];
+  const band = STATE_BANDS[worldState] ?? STATE_BANDS.domesticated;
+  const color = STATE_COLORS[worldState] ?? STATE_COLORS.domesticated;
+  const nextColor = band.nextKey ? STATE_COLORS[band.nextKey] : null;
+  const pct = (rollingAverage ?? 0) / DAILY_MAX;
+  const rawProgress = band.nextKey
+    ? Math.min((pct - band.min) / (band.max - band.min), 1)
+    : 1;
+  const atEarlyUserCeiling = earlyUser && rawProgress >= 1 && band.nextKey;
+  const bandProgress = atEarlyUserCeiling ? 0.9 : rawProgress;
 
   const EARLY_TEXT = {
     domesticated: 'The first step is showing up.',
@@ -57,11 +68,36 @@ export default function WorldScreen({
         <AvatarSprite worldState={worldState} pillarData={pillarAverages} scale={pos.scale} />
       </div>
 
-      {/* State name — top left */}
+      {/* State name + progress — top left */}
       <div className="absolute left-4 z-20" style={{ top: 'max(16px, env(safe-area-inset-top))' }}>
         <div className="text-bone text-xs font-bold uppercase opacity-90"
           style={{ letterSpacing: '0.3em' }}>
           {state?.name}
+        </div>
+        {/* Progress bar toward next state */}
+        <div style={{ width: '180px', marginTop: '6px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '5px' }}>
+            <span style={{ fontSize: '9px', letterSpacing: '0.12em', fontWeight: 700, color: color.fill }}>{state?.name}</span>
+            {nextColor
+              ? <span style={{ fontSize: '9px', letterSpacing: '0.12em', color: nextColor.fill }}>{WORLD_STATES[band.nextKey]?.name}</span>
+              : <span style={{ fontSize: '9px', letterSpacing: '0.12em', color: color.fill }}>PEAK</span>
+            }
+          </div>
+          <div style={{ height: '10px', background: 'rgba(0,0,0,0.65)', borderRadius: '4px', border: `1px solid ${color.border}` }}>
+            <div style={{
+              height: '100%',
+              width: `${Math.max(bandProgress * 100, 2)}%`,
+              background: nextColor
+                ? `linear-gradient(to right, ${color.fill}, ${nextColor.fill})`
+                : color.fill,
+              borderRadius: '4px',
+              transition: 'width 1s ease-out',
+              boxShadow: `0 0 10px ${color.fill}70`,
+            }} />
+          </div>
+          <div style={{ textAlign: 'right', marginTop: '3px', fontSize: '9px', color: '#6a6058', letterSpacing: '0.08em' }}>
+            {Math.round(bandProgress * 100)}%
+          </div>
         </div>
         {earlyText && (
           <div className="text-bone mt-1 opacity-50"

@@ -1,10 +1,9 @@
 /* eslint-disable react/prop-types */
 import { useRef, useState } from 'react';
-import AvatarFigure from './AvatarFigure';
-import WorldComposition from './WorldComposition';
+import AvatarSprite from './AvatarSprite';
+import { STATE_COLORS, STATE_BANDS as SBANDS, WORLD_STATES } from '../constants/worldStates';
 import { PILLARS } from '../constants/pillars';
-import { WORLD_STATES } from '../constants/worldStates';
-import { getPillarAverages, getWeakestPillar } from '../utils/scoring';
+import { getPillarAverages, getWeakestPillar, DAILY_MAX } from '../utils/scoring';
 import { TOTAL_ELEMENTS } from '../utils/unlocks';
 import { exportData, importData } from '../utils/storage';
 
@@ -12,52 +11,60 @@ const TIER_LOW  = 1.5;
 const TIER_HIGH = 2.3;
 
 const TIER_LABELS = {
-  nourishment: { low: 'Soft',  mid: 'Average', high: 'Muscular' },
-  movement:    { low: 'Thin',  mid: 'Normal',  high: 'Muscular' },
+  nourishment: { low: 'OVERWEIGHT', mid: 'SKINNY FAT', high: 'RIPPED' },
+  movement:    { low: 'WEAK',       mid: 'AVERAGE',    high: 'JACKED'  },
 };
+
+const TIER_COLORS = { low: '#6B7280', mid: '#16A34A', high: '#0891B2' };
 
 function TierBar({ avg, pillarKey }) {
   const labels = TIER_LABELS[pillarKey];
-  let progress, currentTier, nextTier;
+  let progress, currentKey, nextKey;
   if (avg >= TIER_HIGH) {
-    progress = 1; currentTier = labels.high; nextTier = null;
+    progress = 1; currentKey = 'high'; nextKey = null;
   } else if (avg >= TIER_LOW) {
     progress = (avg - TIER_LOW) / (TIER_HIGH - TIER_LOW);
-    currentTier = labels.mid; nextTier = labels.high;
+    currentKey = 'mid'; nextKey = 'high';
   } else {
     progress = avg / TIER_LOW;
-    currentTier = labels.low; nextTier = labels.mid;
+    currentKey = 'low'; nextKey = 'mid';
   }
+  const currentTier = labels[currentKey];
+  const nextTier    = nextKey ? labels[nextKey] : null;
+  const currentColor = TIER_COLORS[currentKey];
+  const nextColor    = nextKey ? TIER_COLORS[nextKey] : TIER_COLORS.high;
   return (
-    <div className="mb-3" style={{ marginTop: '-4px' }}>
-      <div className="flex justify-between mb-1">
-        <span style={{ fontSize: '9px', letterSpacing: '0.1em', color: '#3a3a3a', textTransform: 'uppercase' }}>
+    <div style={{ marginTop: '16px' }}>
+      <div className="flex justify-between items-baseline mb-2">
+        <span className="text-xs tracking-[0.25em] font-bold" style={{ color: currentColor }}>
           {currentTier}
         </span>
         {nextTier
-          ? <span style={{ fontSize: '9px', letterSpacing: '0.1em', color: '#6a4a2a', textTransform: 'uppercase' }}>
-              {nextTier}
-            </span>
-          : <span style={{ fontSize: '9px', letterSpacing: '0.1em', color: '#8b3a2a', textTransform: 'uppercase' }}>
-              MAX
-            </span>
+          ? <span className="text-xs tracking-[0.15em]" style={{ color: nextColor }}>{nextTier}</span>
+          : <span className="text-xs tracking-[0.15em]" style={{ color: nextColor }}>PEAK</span>
         }
       </div>
-      <div style={{ height: '3px', background: '#111', borderRadius: '2px' }}>
+      <div style={{ height: '8px', background: '#111', borderRadius: '3px', border: `1px solid ${currentColor}60` }}>
         <div style={{
           height: '100%',
-          width: `${Math.min(progress * 100, 100)}%`,
-          background: nextTier ? '#4a2a1a' : '#8b3a2a',
-          borderRadius: '2px',
-          transition: 'width 0.8s ease-out',
+          width: `${Math.max(progress * 100, 2)}%`,
+          background: nextKey ? `linear-gradient(to right, ${currentColor}, ${nextColor})` : currentColor,
+          borderRadius: '3px',
+          transition: 'width 1s ease-out',
+          boxShadow: `0 0 6px ${currentColor}60`,
         }} />
+      </div>
+      <div style={{ textAlign: 'right', marginTop: '4px', fontSize: '10px', color: '#4a4a4a', letterSpacing: '0.08em' }}>
+        {Math.round(progress * 100)}%
       </div>
     </div>
   );
 }
 
-function StatBar({ value, max = 3, label }) {
+function StatBar({ value, max = 3, label, fillColor = '#8b3a2a', glowColor = 'rgba(139,58,42,0.35)', isWeak = false }) {
   const pct = Math.min((value / max) * 100, 100);
+  const barColor = isWeak ? fillColor + '70' : fillColor;
+  const glow = isWeak ? 'none' : `0 0 5px ${glowColor}`;
   return (
     <div className="mb-2">
       <div className="flex justify-between items-center mb-1">
@@ -72,7 +79,8 @@ function StatBar({ value, max = 3, label }) {
         <div style={{
           height: '100%',
           width: `${pct}%`,
-          background: pct >= 66 ? '#8b3a2a' : pct >= 33 ? '#4a2a1a' : '#2a1a0a',
+          background: barColor,
+          boxShadow: glow,
           transition: 'width 0.8s ease-out',
         }} />
       </div>
@@ -88,11 +96,22 @@ export default function AvatarScreen({
   logs,
   unlockedElements,
   onImport,
+  earlyUser,
 }) {
   const state = WORLD_STATES[worldState];
   const pillarAvgs = getPillarAverages(logs);
   const weakest = getWeakestPillar(pillarAvgs, PILLARS);
-  const hasApexCrown = unlockedElements.includes('apex_crown');
+
+  const band = SBANDS[worldState] ?? SBANDS.domesticated;
+  const color = STATE_COLORS[worldState] ?? STATE_COLORS.domesticated;
+  const nextColor = band.nextKey ? STATE_COLORS[band.nextKey] : null;
+  const pct = rollingAverage / DAILY_MAX;
+  const rawProgress = band.nextKey
+    ? Math.min((pct - band.min) / (band.max - band.min), 1)
+    : 1;
+  // Cap at 90% when earlyUser is holding the player below the next state
+  const atEarlyUserCeiling = earlyUser && rawProgress >= 1 && band.nextKey;
+  const bandProgress = atEarlyUserCeiling ? 0.9 : rawProgress;
 
   const fileInputRef = useRef(null);
   const [importStatus, setImportStatus] = useState(null); // null | 'ok' | 'err'
@@ -117,34 +136,59 @@ export default function AvatarScreen({
 
   return (
     <div className="h-full flex flex-col overflow-hidden" style={{ background: '#080808' }}>
-      {/* World background peek at top */}
-      <div className="flex-shrink-0 relative overflow-hidden" style={{ height: '240px' }}>
-        <div className="absolute inset-0">
-          <WorldComposition worldState={worldState} unlockedElements={unlockedElements} />
-        </div>
+      {/* Avatar hero */}
+      <div className="flex-shrink-0 flex flex-col items-center justify-center relative" style={{ height: '300px' }}>
         <div className="absolute inset-0" style={{
-          background: 'linear-gradient(to bottom, rgba(0,0,0,0.2) 0%, rgba(8,8,8,0.85) 100%)'
+          background: 'radial-gradient(ellipse at 50% 80%, rgba(139,58,42,0.10) 0%, transparent 68%)',
         }} />
-        {/* Avatar */}
-        <div className="absolute bottom-0 left-1/2 -translate-x-1/2">
-          <AvatarFigure worldState={worldState} size="large" hasApexCrown={hasApexCrown} />
+        <AvatarSprite worldState={worldState} pillarData={pillarAvgs} scale={3} />
+        <div className="absolute bottom-3 text-xs tracking-[0.3em]" style={{ color: '#c4622d' }}>
+          {state?.name}
         </div>
       </div>
 
       {/* Scrollable stats */}
       <div className="flex-1 panel-scroll px-4 pt-4 pb-6">
-        {/* State name + description */}
+
+        {/* State progression bar */}
         <div className="mb-5">
-          <div className="text-xs tracking-[0.3em] mb-1" style={{ color: '#c4622d' }}>
-            {state?.name}
+          <div className="flex justify-between items-baseline mb-2">
+            <span className="text-xs tracking-[0.25em] font-bold" style={{ color: color.fill }}>
+              {state?.name}
+            </span>
+            {nextColor
+              ? <span className="text-xs tracking-[0.15em]" style={{ color: nextColor.fill }}>{WORLD_STATES[band.nextKey]?.name}</span>
+              : <span className="text-xs tracking-[0.15em]" style={{ color: color.fill }}>PEAK</span>
+            }
           </div>
-          <p style={{ fontSize: '13px', color: '#6a6058', lineHeight: 1.6 }}>
-            {state?.description}
-          </p>
+          <div style={{ height: '8px', background: '#111', borderRadius: '3px', border: `1px solid ${color.border}` }}>
+            <div style={{
+              height: '100%',
+              width: `${Math.max(bandProgress * 100, 2)}%`,
+              background: nextColor
+                ? `linear-gradient(to right, ${color.fill}, ${nextColor.fill})`
+                : color.fill,
+              borderRadius: '3px',
+              transition: 'width 1s ease-out',
+              boxShadow: `0 0 8px ${color.fill}60`,
+            }} />
+          </div>
+          <div style={{ textAlign: 'right', marginTop: '4px', fontSize: '10px', color: '#4a4a4a', letterSpacing: '0.08em' }}>
+            {Math.round(bandProgress * 100)}%
+          </div>
+          <TierBar avg={pillarAvgs.nourishment} pillarKey="nourishment" />
+          <TierBar avg={pillarAvgs.movement} pillarKey="movement" />
         </div>
 
         {/* Divider */}
         <div style={{ height: '1px', background: '#141414', marginBottom: '16px' }} />
+
+        {/* State description */}
+        <div className="mb-5">
+          <p style={{ fontSize: '13px', color: '#6a6058', lineHeight: 1.6 }}>
+            {state?.description}
+          </p>
+        </div>
 
         {/* Streak stats */}
         <div className="flex gap-4 mb-5">
@@ -171,12 +215,14 @@ export default function AvatarScreen({
             7-Day Pillar Average
           </div>
           {PILLARS.map(p => (
-            <div key={p.key}>
-              <StatBar label={`${p.emoji} ${p.label}`} value={pillarAvgs[p.key]} />
-              {(p.key === 'nourishment' || p.key === 'movement') && (
-                <TierBar avg={pillarAvgs[p.key]} pillarKey={p.key} />
-              )}
-            </div>
+            <StatBar
+              key={p.key}
+              label={`${p.emoji} ${p.label}`}
+              value={pillarAvgs[p.key]}
+              fillColor={color.fill}
+              glowColor={color.border}
+              isWeak={p.key === weakest?.key}
+            />
           ))}
         </div>
 

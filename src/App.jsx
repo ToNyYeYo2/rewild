@@ -123,6 +123,7 @@ export default function App() {
             transitioning={transitioning}
             earlyUser={appState.earlyUser}
             pillarAverages={appState.pillarAverages}
+            rollingAverage={appState.rollingAverage}
           />
         )}
         {screen === 'log' && (
@@ -141,6 +142,7 @@ export default function App() {
             logs={data.logs}
             unlockedElements={data.unlockedElements}
             onImport={handleImport}
+            earlyUser={appState.earlyUser}
           />
         )}
         {screen === 'history' && (
