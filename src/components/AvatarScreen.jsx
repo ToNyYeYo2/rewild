@@ -8,6 +8,54 @@ import { getPillarAverages, getWeakestPillar } from '../utils/scoring';
 import { TOTAL_ELEMENTS } from '../utils/unlocks';
 import { exportData, importData } from '../utils/storage';
 
+const TIER_LOW  = 1.5;
+const TIER_HIGH = 2.3;
+
+const TIER_LABELS = {
+  nourishment: { low: 'Soft',  mid: 'Average', high: 'Muscular' },
+  movement:    { low: 'Thin',  mid: 'Normal',  high: 'Muscular' },
+};
+
+function TierBar({ avg, pillarKey }) {
+  const labels = TIER_LABELS[pillarKey];
+  let progress, currentTier, nextTier;
+  if (avg >= TIER_HIGH) {
+    progress = 1; currentTier = labels.high; nextTier = null;
+  } else if (avg >= TIER_LOW) {
+    progress = (avg - TIER_LOW) / (TIER_HIGH - TIER_LOW);
+    currentTier = labels.mid; nextTier = labels.high;
+  } else {
+    progress = avg / TIER_LOW;
+    currentTier = labels.low; nextTier = labels.mid;
+  }
+  return (
+    <div className="mb-3" style={{ marginTop: '-4px' }}>
+      <div className="flex justify-between mb-1">
+        <span style={{ fontSize: '9px', letterSpacing: '0.1em', color: '#3a3a3a', textTransform: 'uppercase' }}>
+          {currentTier}
+        </span>
+        {nextTier
+          ? <span style={{ fontSize: '9px', letterSpacing: '0.1em', color: '#6a4a2a', textTransform: 'uppercase' }}>
+              {nextTier}
+            </span>
+          : <span style={{ fontSize: '9px', letterSpacing: '0.1em', color: '#8b3a2a', textTransform: 'uppercase' }}>
+              MAX
+            </span>
+        }
+      </div>
+      <div style={{ height: '3px', background: '#111', borderRadius: '2px' }}>
+        <div style={{
+          height: '100%',
+          width: `${Math.min(progress * 100, 100)}%`,
+          background: nextTier ? '#4a2a1a' : '#8b3a2a',
+          borderRadius: '2px',
+          transition: 'width 0.8s ease-out',
+        }} />
+      </div>
+    </div>
+  );
+}
+
 function StatBar({ value, max = 3, label }) {
   const pct = Math.min((value / max) * 100, 100);
   return (
@@ -123,7 +171,12 @@ export default function AvatarScreen({
             7-Day Pillar Average
           </div>
           {PILLARS.map(p => (
-            <StatBar key={p.key} label={`${p.emoji} ${p.label}`} value={pillarAvgs[p.key]} />
+            <div key={p.key}>
+              <StatBar label={`${p.emoji} ${p.label}`} value={pillarAvgs[p.key]} />
+              {(p.key === 'nourishment' || p.key === 'movement') && (
+                <TierBar avg={pillarAvgs[p.key]} pillarKey={p.key} />
+              )}
+            </div>
           ))}
         </div>
 
